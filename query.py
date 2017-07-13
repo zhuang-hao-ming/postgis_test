@@ -41,3 +41,35 @@ def get_tracks():
         if conn is not None:
             conn.close()
 
+def get_closest_points(log_ids):
+    sql ='''
+    SELECT 
+        ST_X(gps.geom) AS log_x,
+        ST_Y(gps.geom) AS log_y,
+        ST_X(ST_ClosestPoint(r.geom, gps.geom)) AS p_x,
+        ST_Y(ST_ClosestPoint(r.geom, gps.geom)) AS p_y,
+        r.gid AS line_id,
+        gps.id AS log_id,
+        gps.direction AS v
+	
+    FROM 
+        road r, 
+        gps_log_valid gps 
+    WHERE 
+        gps.id in %s AND
+        ST_DWithin(gps.geom, r.geom,  30);
+    '''
+    conn = None
+    try:
+        parmas = config()
+        conn = psycopg2.connect(**parmas)
+        cur = conn.cursor()
+        cur.execute(sql, (log_ids,))
+        rows = cur.fetchall()
+        cur.close()
+        return rows
+    except (Exception, psycopg2.DatabaseError) as error:
+        print(error)
+    finally:
+        if conn is not None:
+            conn.close()
