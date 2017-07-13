@@ -39,7 +39,7 @@ def insert_logs(gps_logs):
 
     # '''
     sql = '''
-    INSERT INTO gps_log2(log_time, unknown_1, car_id, velocity, direction, on_service, is_valid, geom)
+    INSERT INTO gps_log(log_time, unknown_1, car_id, velocity, direction, on_service, is_valid, geom)
     VALUES (%s, %s, %s, %s, %s, %s, %s, ST_Transform(ST_GeomFromText('POINT(%s %s)', 4326), 32649));
     '''
     

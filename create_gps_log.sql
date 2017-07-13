@@ -99,7 +99,7 @@ SELECT COUNT(*) FROM tracks;
 SELECT * FROM tracks LIMIT 10;
 
 
-SELECT * FROM tracks WHERE array_length(points, 1) > 5 LIMIT 1;
+SELECT * FROM tracks WHERE array_length(points, 1) > 10 LIMIT 1;
 
 
 SELECT * FROM gps_log_valid WHERE id = ANY(ARRAY [1088530,1105285,1106874,1118795,1132178,1145744,1147531])
