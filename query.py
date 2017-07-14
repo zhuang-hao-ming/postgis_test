@@ -5,7 +5,7 @@ from config import config
 
 def get_logs(limit=10, offset=0):
     sql = '''
-            SELECT id,log_time, car_id, direction AS v, ST_X(geom) AS x, ST_Y(geom) AS y  FROM gps_log_valid WHERE log_time::time between '07:30:00' AND '08:30:00' ORDER BY car_id, log_time LIMIT %s OFFSET %s;
+            SELECT id,log_time, car_id, direction AS v, ST_X(geom) AS x, ST_Y(geom) AS y  FROM gps_log_valid ORDER BY car_id, log_time LIMIT %s OFFSET %s;
           '''
     conn = None
     try:

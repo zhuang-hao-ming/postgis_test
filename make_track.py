@@ -2,6 +2,7 @@
 import datetime
 from query import get_logs
 from insert import insert_track
+
 def test_time_dis_constrain(pre_log, now_log,time_threshold = 120, speed_threshold = 33):
     
     
@@ -31,13 +32,13 @@ def test_time_dis_constrain(pre_log, now_log,time_threshold = 120, speed_thresho
 
 
 def main():
-    offset = 1800000
-    limit = 200000
-    while True:
+    offset = 0
+    limit = 100000
+    if True:
         print('offset: {0}, limit: {1}'.format(offset, limit))
         logs = get_logs(limit=limit, offset=offset)    
         if len(logs) <= 0:
-            break
+            pass
 
         tracks = []
         a_track = [logs[0][0]]

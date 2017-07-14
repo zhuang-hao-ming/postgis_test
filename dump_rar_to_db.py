@@ -5,8 +5,8 @@ from insert import insert_logs
 import time
 from multiprocessing import Pool, cpu_count
 
-rar_path_base = r'F:\taxi\shenzhen_2009_5_taxi_data\{0}.rar'
-rarfile.UNRAR_TOOL = r"C:\Program Files\WinRAR\UnRAR.exe"
+rar_path_base = r'C:\tasks\road_network\shenzhen_2009_5_taxi_data\{0}.rar' #rar文件的路径
+rarfile.UNRAR_TOOL = r'C:\app\unrar\UnRAR.exe' # unrar.exe的路径 
 
 
 
@@ -44,17 +44,15 @@ def insert_a_log_file_to_db(f):
 
 def insert_worker(rar_path):
     print(rar_path)
-    # for i in range(1, 32):
+
     begin_tick = time.time()
-        # if i % cpu_count() != cpu:
-        #     continue
-    #rar_path = rar_path_base.format(i)
+
     with rarfile.RarFile(rar_path) as rf:
         for f in rf.infolist():
             # print f.filename
             if f.filename.split('/')[-1] == '7.txt' or f.filename.split('/')[-1] == '8.txt':
                 print(f.filename)
-                with rf.open(f.filename) as f:
+                with rf.open(f.filename) as f:                   
                     insert_a_log_file_to_db(f)
     print('{0} s for insert {1}'.format(time.time() - begin_tick, rar_path))
     return cpu
@@ -62,11 +60,18 @@ def insert_worker(rar_path):
 def insert_callback(cpu):
     print("End of worker: " + str(cpu))
 
+
+
+
+
+
+
+
+
+
+
 if __name__ == '__main__':
-    pool = Pool(processes=8)
-    # for cpu in range(cpu_count()):
-    #     print cpu
-    #     pool.apply_async(insert_worker, (cpu,), callback=insert_callback)
+    pool = Pool(processes=cpu_count())
     for i in range(1, 32):
         rar_path = rar_path_base.format(i)
         pool.apply_async(insert_worker, (rar_path,), callback=insert_callback)
