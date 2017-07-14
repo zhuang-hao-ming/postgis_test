@@ -24,7 +24,7 @@ def get_logs(limit=10, offset=0):
 
 def get_tracks():
     sql = '''
-            SELECT * FROM tracks WHERE array_length(points, 1) > 5 LIMIT 1;
+            SELECT * FROM tracks WHERE array_length(points, 1) > 10 AND id = 6584 LIMIT 1;
           '''
     conn = None
     try:
