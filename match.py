@@ -1,5 +1,6 @@
 # -*- encoding: utf-8
-from query import get_tracks, get_closest_points
+from query import get_tracks, get_closest_points, get_distance_in_linestring, get_path_cost, get_distance_to_start
+from insert import insert_match
 import math
 import networkx as nx
 import matplotlib.pyplot as plt
@@ -16,7 +17,7 @@ def is_same_direction(x1, y1, x2, y2):
 
 # observation probability
 def get_observation_prob(closest_point):
-    log_x, log_y, p_x, p_y, line_id, log_id, v = closest_point
+    log_x, log_y, p_x, p_y, line_id, log_id, v, source, target = closest_point
 
     dis = euclidan_dis(log_x, log_y, p_x, p_y)
 
@@ -30,9 +31,9 @@ def euclidan_dis(x1, y1, x2, y2):
 
 
 
-def get_path_distance(pre_closest_point, now_closest_points)
-    pre_log_x, pre_log_y, pre_p_x, pre_p_y, pre_line_id, pre_log_id, v = pre_closest_point
-    now_log_x, now_log_y, now_p_x, now_p_y, now_line_id, now_log_id, v = now_closest_points
+def get_path_distance(pre_closest_point, now_closest_point):
+    pre_log_x, pre_log_y, pre_p_x, pre_p_y, pre_line_id, pre_log_id, pre_v, pre_source, pre_target = pre_closest_point
+    now_log_x, now_log_y, now_p_x, now_p_y, now_line_id, now_log_id, now_v, now_source, now_target = now_closest_point
 
     if pre_line_id == now_line_id: # 共线
         x1 = now_log_x - pre_log_x
@@ -42,11 +43,12 @@ def get_path_distance(pre_closest_point, now_closest_points)
         
         if is_same_direction(x1, y1, x2, y2): # 共向
 
-            return 0 # 返回道路上的距离
-
+            
+            path_dis = get_distance_in_linestring(pre_p_x, pre_p_y, now_p_x, now_p_y, now_line_id)[0]
+            return path_dis # 返回道路上的距离
 
         else: # 反向
-            if 1： # 道路双向
+            if 1: # 道路双向
                 return 9999 # 认为这是一种错误的情况， 返回一个大值
             else: # 道路单向
                 return 9999 # 认为这是一种错误的情况， 返回一个大值
@@ -56,9 +58,49 @@ def get_path_distance(pre_closest_point, now_closest_points)
     else: #不共线
         if 1: # p1双向
             if 1: # p2双向
+
+                pre_proportion, pre_len = get_distance_to_start(pre_p_x, pre_p_y, pre_line_id)
+                now_proportion, now_len = get_distance_to_start(now_p_x, now_p_y, now_line_id)
+
+                path_dis_dict = {
+                    pre_source: {},
+                    pre_target: {}
+                }
+
+                source_ids = [pre_source, pre_target]
+                target_ids = [now_source, now_target]
                 
+
+                rows = get_path_cost(source_ids, target_ids)
+
+                for row in rows:
+                    path_dis_dict[row[0]][row[1]] = row[2]
                 
-            else:
+                min_path_dis = 999999999
+                for id_x, key_x in enumerate(source_ids):
+                    for id_y, key_y in enumerate(target_ids):
+                        
+                            routing_dis = path_dis_dict[key_x].get(key_y, -100) 
+                            if routing_dis == -100: # 不存在可能为0或者为无穷大
+                                if key_x in target_ids:
+                                    routing_dis = 0
+                                else:
+                                    routing_dis = 999999999
+                            if id_x == 0:
+                                routing_dis += pre_len * pre_proportion 
+                            elif id_x ==1:
+                                routing_dis += pre_len * (1.0 - pre_proportion)
+                            if id_y == 0:
+                                routing_dis += now_len * now_proportion
+                            elif id_y == 1:
+                                routing_dis += now_len * (1.0 - now_proportion)
+
+                            if routing_dis < min_path_dis:
+                                min_path_dis = routing_dis
+
+
+                return min_path_dis
+            else: #p2单
                 pass
         else: # p1单向
             if 1: # p2双向
@@ -69,9 +111,14 @@ def get_path_distance(pre_closest_point, now_closest_points)
 
 
 # transimission probability
-def get_transmission_probability(pre_closest_point, now_closest_points):
-    pass
+def get_transmission_probability(pre_closest_point, now_closest_point):
+    p_path_dis = get_path_distance(pre_closest_point, now_closest_point)
 
+    pre_log_x, pre_log_y, pre_p_x, pre_p_y, pre_line_id, pre_log_id, pre_v, pre_source, pre_target = pre_closest_point
+    now_log_x, now_log_y, now_p_x, now_p_y, now_line_id, now_log_id, now_v, now_source, now_target = now_closest_point
+    log_dis = euclidan_dis(pre_log_x, pre_log_y, now_log_x, now_log_y)
+
+    return log_dis / p_path_dis
 
 
 
@@ -101,17 +148,47 @@ def construct_graph(log_ids, closest_points, log_closest_dict):
 
                     transmission_prob = get_transmission_probability(closest_points[idx], closest_points[closest_idx])
 
-                    g.add_edge(idx, closest_idx)
+                    g.add_edge(idx, closest_idx, transmission_prob=transmission_prob)
 
         pre_layer_idx = now_layer_idx
     
-    
+    return g
 
 
     
                     
-    # 观察概率
+def find_match_seqence(g, log_ids, log_closest_dict):
+    f = {}
+    pre = {}
+    for idx in log_closest_dict[log_ids[0]]:
+             
+        f[idx] = g.node[idx]['observation_prob']        
+    for layer_idx, log_id in enumerate(log_ids[1:]):
+        for p_idx in log_closest_dict[log_id]:
+            max_f = -99999999
+            for p_p_idx in log_closest_dict[log_ids[layer_idx]]:
+                alt = g.edge[p_p_idx][p_idx]['transmission_prob'] + f[p_p_idx]
+                if alt > max_f:
+                    max_f = alt
+                    pre[p_idx] = p_p_idx
+                f[p_idx] = max_f
+    max_c = -99999999
+    max_key = None
+    for key, val in f.items():
+        if val > max_c:
+            max_key = key
+            max_c = val
+        else:
+            continue
+    r_list = []
+    for i in range(1, len(log_ids)):
+        r_list.append(max_key)
+        max_key = pre[max_key]
+    r_list.append(max_key)
+    r_list.reverse()
+    return r_list
     
+
     
 
 
@@ -132,15 +209,16 @@ def main():
         closest_points = get_closest_points(tuple(track[1])) # get gps log id's closest point in raod network
         
         for idx, point in enumerate(closest_points):
-            log_x, log_y, p_x, p_y, line_id, log_id, v = point                                    
+            log_x, log_y, p_x, p_y, line_id, log_id, v, source, target = point                                    
             log_closest_dict[int(log_id)].append(idx)
         
-        print(log_closest_dict)
-
-        construct_graph(track[1] , closest_points, log_closest_dict)
-
         
+
+        g = construct_graph(track[1] , closest_points, log_closest_dict)
         
+        match_list = find_match_seqence(g, track[1], log_closest_dict)
+        
+        insert_match(match_list, closest_points, 15)
         
         
 

@@ -24,7 +24,7 @@ def get_logs(limit=10, offset=0):
 
 def get_tracks():
     sql = '''
-            SELECT * FROM tracks WHERE array_length(points, 1) > 10 AND id = 6584 LIMIT 1;
+            SELECT * FROM tracks WHERE array_length(points, 1) > 10 AND id = 15 LIMIT 1;
           '''
     conn = None
     try:
@@ -50,10 +50,12 @@ def get_closest_points(log_ids):
         ST_Y(ST_ClosestPoint(r.geom, gps.geom)) AS p_y,
         r.gid AS line_id,
         gps.id AS log_id,
-        gps.direction AS v
+        gps.direction AS v,
+        r.source AS source,
+	    r.target AS target
 	
     FROM 
-        road r, 
+        shenzhen_network r, 
         gps_log_valid gps 
     WHERE 
         gps.id in %s AND
@@ -65,6 +67,93 @@ def get_closest_points(log_ids):
         conn = psycopg2.connect(**parmas)
         cur = conn.cursor()
         cur.execute(sql, (log_ids,))
+        rows = cur.fetchall()
+        cur.close()
+        return rows
+    except (Exception, psycopg2.DatabaseError) as error:
+        print(error)
+    finally:
+        if conn is not None:
+            conn.close()
+
+def get_distance_in_linestring(pre_x, pre_y, now_x, now_y, line_id):
+    sql = '''
+            WITH
+            data AS (
+                SELECT ST_GeomFromText('POINT(%s %s)', 32649) pta,
+                    ST_GeomFromText('POINT(%s %s)', 32649) ptb,
+                    ST_GeometryN(geom, 1)::geometry(linestring, 32649) line FROM shenzhen_network WHERE gid = %s
+            )
+            SELECT 
+                ST_Length(
+                    ST_LineSubstring(
+                        line,
+                        least(ST_LineLocatePoint(line, pta), ST_LineLocatePoint(line, ptb)),
+                        greatest(ST_LineLocatePoint(line, pta), ST_LineLocatePoint(line, ptb))
+                        )
+                    )
+            FROM 
+                data;
+    '''
+    conn = None
+    try:
+        parmas = config()
+        conn = psycopg2.connect(**parmas)
+        cur = conn.cursor()
+        cur.execute(sql, (pre_x, pre_y, now_x, now_y, line_id))
+        row = cur.fetchone()
+        cur.close()
+        return row
+    except (Exception, psycopg2.DatabaseError) as error:
+        print(error)
+    finally:
+        if conn is not None:
+            conn.close()
+
+def get_distance_to_start(x, y, line_id):
+    sql = '''
+        WITH
+        data AS (
+        SELECT 
+            ST_GeomFromText('POINT(%s %s)', 32649) pta,
+            ST_GeometryN(geom, 1)::geometry(linestring, 32649) line FROM shenzhen_network WHERE gid=%s
+        )
+        SELECT  ST_LineLocatePoint(line, pta), ST_Length(line) FROM data;
+    '''
+    conn = None
+    try:
+        parmas = config()
+        conn = psycopg2.connect(**parmas)
+        cur = conn.cursor()
+        cur.execute(sql, (x, y, line_id))
+        row = cur.fetchone()
+        cur.close()
+        return row
+    except (Exception, psycopg2.DatabaseError) as error:
+        print(error)
+    finally:
+        if conn is not None:
+            conn.close()    
+
+def get_path_cost(pre_ids, now_ids):
+    sql ='''
+        SELECT *
+        FROM pgr_dijkstraCost('
+            SELECT gid AS id,
+                source,
+                target,
+                ST_Length(geom) AS cost
+                FROM shenzhen_network',
+            %s,
+            %s,
+            directed := false);
+    '''
+    conn = None
+    try:
+        parmas = config()
+        conn = psycopg2.connect(**parmas)
+        cur = conn.cursor()
+        cur.execute(sql, (pre_ids,now_ids))
         rows = cur.fetchall()
         cur.close()
         return rows

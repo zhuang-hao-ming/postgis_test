@@ -24,6 +24,37 @@ def insert_track(tracks):
             conn.close()
 
 
+def insert_match(match_list, closest_points, track_id):
+
+    # sql = '''
+    # INSERT INTO tracks(points) VALUES (%s);
+    # '''
+    # conn = None
+    # try:
+    #     params = config.config()
+    #     conn = psycopg2.connect(**params)
+    #     cur = conn.cursor()
+    #     cur.executemany(sql, tracks)
+    #     conn.commit()
+    #     cur.close()
+    # except (Exception, psycopg2.DatabaseError) as error:
+    #     print(error)
+    # finally:
+    #     if conn is not None:
+    #         conn.close()
+    f = open('test.csv', 'w')
+    for i in match_list:
+        now_log_x, now_log_y, now_p_x, now_p_y, now_line_id, now_log_id, now_v, now_source, now_target = closest_points[i]
+        f.write('{0},{1}\n'.format(now_p_x, now_p_y))
+
+
+
+
+
+
+
+
+
 
 
 
