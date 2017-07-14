@@ -101,9 +101,8 @@ ALTER TABLE shenzhen_network ADD COLUMN "source" integer;
 ALTER TABLE shenzhen_network ADD COLUMN "target" integer;
 SELECT pgr_createTopology('shenzhen_network', 1, 'geom', 'gid');
 
-SELECT * FROM shenzhen_network_vertices_pgr;
-SELECT * FROM shenzhen_network LIMIT 1;
 
+-- 最短路径查询例子
 SELECT * FROM pgr_dijkstra('
     SELECT gid AS id,
          source,
@@ -118,6 +117,6 @@ SELECT routing.seq, network.geom FROM shenzhen_network network, (SELECT * FROM p
 pgsql2shp -f routing.shp -h localhost -u postgres -P 123456 road_gps "SELECT routing.seq, network.geom FROM shenzhen_network network, (SELECT * FROM pgr_dijkstra('SELECT gid AS id,source,target,shape_leng::float AS cost FROM shenzhen_network', 10519, 549, directed := false)) routing WHERE network.gid = routing.edge ORDER BY seq;"
 
 
-
+SELECT * FROM tracks WHERE array_length(points, 1) > 10 AND id = 6584 LIMIT 1;
 
 
