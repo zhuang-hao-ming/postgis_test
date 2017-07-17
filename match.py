@@ -1,9 +1,12 @@
 # -*- encoding: utf-8
+
 from query import get_tracks, get_closest_points, get_distance_in_linestring, get_path_cost, get_distance_to_start
 from insert import insert_match
 import math
 import networkx as nx
 import matplotlib.pyplot as plt
+import time
+
 # 标准正态分布的概率密度函数
 def normal_distribution(x, u = 0.0, sigma = 20.0):    
     return (1.0 / ( ((2 * math.pi)  ** 0.5) * sigma)) * math.exp( -( (x-u)**2 / (2 * sigma**2) ) )
@@ -59,8 +62,8 @@ def get_path_distance(pre_closest_point, now_closest_point):
         if 1: # p1双向
             if 1: # p2双向
 
-                pre_proportion, pre_len = get_distance_to_start(pre_p_x, pre_p_y, pre_line_id)
-                now_proportion, now_len = get_distance_to_start(now_p_x, now_p_y, now_line_id)
+                pre_proportion, pre_len = get_distance_to_start(pre_p_x, pre_p_y, pre_line_id) # p1到路径起点长度的比例， 路径的长度
+                now_proportion, now_len = get_distance_to_start(now_p_x, now_p_y, now_line_id) # p2到路径起点长度的比例， 路径的长度
 
                 path_dis_dict = {
                     pre_source: {},
@@ -71,7 +74,7 @@ def get_path_distance(pre_closest_point, now_closest_point):
                 target_ids = [now_source, now_target]
                 
 
-                rows = get_path_cost(source_ids, target_ids)
+                rows = get_path_cost(source_ids, target_ids) # 得到p1所在路径的起点终点，到p2所在路径的起点终点的dijkstra距离
 
                 for row in rows:
                     path_dis_dict[row[0]][row[1]] = row[2]
@@ -86,13 +89,13 @@ def get_path_distance(pre_closest_point, now_closest_point):
                                     routing_dis = 0
                                 else:
                                     routing_dis = 999999999
-                            if id_x == 0:
+                            if id_x == 0: # 从p1的source出发                    
                                 routing_dis += pre_len * pre_proportion 
-                            elif id_x ==1:
+                            elif id_x ==1: # 从p1的target出发                        
                                 routing_dis += pre_len * (1.0 - pre_proportion)
-                            if id_y == 0:
+                            if id_y == 0: # 到达p2的source
                                 routing_dis += now_len * now_proportion
-                            elif id_y == 1:
+                            elif id_y == 1: # 到达p2的target
                                 routing_dis += now_len * (1.0 - now_proportion)
 
                             if routing_dis < min_path_dis:
@@ -112,13 +115,14 @@ def get_path_distance(pre_closest_point, now_closest_point):
 
 # transimission probability
 def get_transmission_probability(pre_closest_point, now_closest_point):
-    p_path_dis = get_path_distance(pre_closest_point, now_closest_point)
+    p_path_dis = get_path_distance(pre_closest_point, now_closest_point) # 两个匹配点的路径距离
 
     pre_log_x, pre_log_y, pre_p_x, pre_p_y, pre_line_id, pre_log_id, pre_v, pre_source, pre_target = pre_closest_point
     now_log_x, now_log_y, now_p_x, now_p_y, now_line_id, now_log_id, now_v, now_source, now_target = now_closest_point
-    log_dis = euclidan_dis(pre_log_x, pre_log_y, now_log_x, now_log_y)
 
-    return log_dis / p_path_dis
+    log_dis = euclidan_dis(pre_log_x, pre_log_y, now_log_x, now_log_y) # 两个gps点的直线距离
+
+    return log_dis / (p_path_dis+0.0000001) # 转移概率
 
 
 
@@ -197,9 +201,14 @@ def find_match_seqence(g, log_ids, log_closest_dict):
 
 def main():
 
+    
+
     tracks = get_tracks() #获得轨迹
+    begin_main = time.time()
     for track in tracks: #遍历轨迹
         
+        begin_track = time.time()
+
         log_closest_dict = {}
         
         for log_id in track[1]: #遍历轨迹的gps log id
@@ -218,8 +227,9 @@ def main():
         
         match_list = find_match_seqence(g, track[1], log_closest_dict)
         
-        insert_match(match_list, closest_points, 15)
+        insert_match(match_list, closest_points, track[0])
         
+        print('track({0}): {1} time: {2} elapse: {3}'.format(track[0], len(track[1]), time.time() - begin_track, time.time() - begin_main))
         
 
 
