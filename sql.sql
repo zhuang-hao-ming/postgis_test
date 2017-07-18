@@ -442,6 +442,7 @@ DELETE FROM points_of_interest;
 
 
 -- extract linestring form multilinestring
+
 SELECT AddGeometryColumn ('public','shenzhen_network','geom_l',32649,'LINESTRING',2);
 UPDATE shenzhen_network SET geom_l = ST_GeometryN(geom, 1)::geometry(linestring, 32649)
 ALTER TABLE shenzhen_network ADD COLUMN cost FLOAT;
