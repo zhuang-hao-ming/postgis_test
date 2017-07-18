@@ -37,7 +37,7 @@ LANGUAGE plpgsql;
 
 --- make track table
 --- this function iterate the gps_log_valid table in order and make track according to criterias given by test_time_dis_constrain function
-CREATE OR REPLACE FUNCTION make_track()
+CREATE OR REPLACE FUNCTION make_track(table_name VARCHAR)
 RETURNS VOID 
 AS $$
 DECLARE 
@@ -63,7 +63,8 @@ BEGIN
 			
 		ELSE	
 			--RAISE INFO 'insert %', log_ids;
-			INSERT INTO tracks_1(points) VALUES(log_ids);
+			EXECUTE format('INSERT INTO %I(points) VALUES($1)', table_name) USING log_ids;
+			--INSERT INTO tracks_1(points) VALUES(log_ids);
 			log_ids := ARRAY[cur_log.id];
 			pre_log := cur_log;
 		END IF;
@@ -71,7 +72,8 @@ BEGIN
 	END LOOP;
 
 	IF array_length(log_ids, 1) > 0 THEN	
-		INSERT INTO tracks_1(points) VALUES(log_ids);
+		EXECUTE format('INSERT INTO %I(points) VALUES($1)', table_name) USING log_ids;
+		--INSERT INTO tracks_1(points) VALUES(log_ids);
 		--RAISE INFO 'end insert %', log_ids;
 	END IF;
   
@@ -84,18 +86,20 @@ LANGUAGE plpgsql;
 
 
 -- create the track table
-CREATE TABLE tracks_1
+CREATE TABLE tracks_2
 (
 id SERIAL PRIMARY KEY,
 points INTEGER[]
 )
 -- invode the function
-SELECT make_track();
+SELECT make_track('tracks_2');
+SELECT COUNT(*) FROM gps_log_valid;
 
+-- 运行时间, 3375809条有效log
 
-
-
-
+-- 类型 时间
+-- 静态查询 37.6s
+-- 动态查询 43.8s
 
 
 
