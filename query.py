@@ -1,6 +1,44 @@
+# -*- encoding: utf-8
 import psycopg2
 from config import config
 
+def get_nodes():
+    sql = '''
+        SELECT id FROM shenzhen_network_vertices_pgr;
+    '''
+    conn = None
+    try:
+        parmas = config()
+        conn = psycopg2.connect(**parmas)
+        cur = conn.cursor()
+        cur.execute(sql)
+        rows = cur.fetchall()
+        cur.close()
+        return rows
+    except (Exception, psycopg2.DatabaseError) as error:
+        print(error)
+    finally:
+        if conn is not None:
+            conn.close()
+
+def get_edges():
+    sql = '''
+        SELECT source, target, cost FROM shenzhen_network;
+        '''
+    conn = None
+    try:
+        parmas = config()
+        conn = psycopg2.connect(**parmas)
+        cur = conn.cursor()
+        cur.execute(sql)
+        rows = cur.fetchall()
+        cur.close()
+        return rows
+    except (Exception, psycopg2.DatabaseError) as error:
+        print(error)
+    finally:
+        if conn is not None:
+            conn.close()  
 
 
 def get_logs(limit=10, offset=0):
@@ -22,9 +60,29 @@ def get_logs(limit=10, offset=0):
         if conn is not None:
             conn.close()
 
+def get_distance_rows(vids):
+    sql = '''
+        SELECT * FROM path_cost WHERE start_vid in %s AND end_vid in %s;
+        '''
+    conn = None
+    try:
+        parmas = config()
+        conn = psycopg2.connect(**parmas)
+        cur = conn.cursor()
+        cur.execute(sql, (vids, vids))
+        rows = cur.fetchall()
+        cur.close()
+        return rows
+    except (Exception, psycopg2.DatabaseError) as error:
+        print(error)
+    finally:
+        if conn is not None:
+            conn.close()
+
+
 def get_tracks():
     sql = '''
-            SELECT * FROM tracks WHERE array_length(points, 1) > 10 LIMIT 1;
+            SELECT * FROM tracks WHERE array_length(points, 1) > 15 LIMIT 100;
           '''
     conn = None
     try:
@@ -41,25 +99,44 @@ def get_tracks():
         if conn is not None:
             conn.close()
 
-def get_closest_points(log_ids):
+
+
+def get_closest_points1(log_ids):
+
     sql ='''
-    SELECT 
-        ST_X(gps.geom) AS log_x,
-        ST_Y(gps.geom) AS log_y,
-        ST_X(ST_ClosestPoint(r.geom, gps.geom)) AS p_x,
-        ST_Y(ST_ClosestPoint(r.geom, gps.geom)) AS p_y,
-        r.gid AS line_id,
-        gps.id AS log_id,
-        gps.direction AS v,
-        r.source AS source,
-	    r.target AS target
-	
-    FROM 
-        shenzhen_network r, 
-        gps_log_valid gps 
-    WHERE 
-        gps.id in %s AND
-        ST_DWithin(gps.geom, r.geom,  30);
+   WITH closest_points AS
+(
+	SELECT 
+		gps.geom as geom_log,
+		r.geom_l as geom_line,
+		r.source as source,
+		r.target as target,
+		r.gid as line_id,
+		gps.id as log_id,
+		gps.direction as v,
+		ST_ClosestPoint(r.geom_l, gps.geom) as geom_closest,
+		r.cost as length
+	FROM
+		shenzhen_network r, 
+		gps_log_valid gps
+	WHERE  
+		gps.id in %s AND
+		ST_DWithin(gps.geom, r.geom_l,  30)
+)	
+SELECT 
+	ST_X(geom_log) AS log_x,
+	ST_Y(geom_log) AS log_y,
+	ST_X(geom_closest) AS p_x,
+	ST_Y(geom_closest) AS p_y,
+	line_id,
+	log_id,
+	v,
+	source,
+	target,	
+	length,
+	ST_LineLocatePoint(geom_line, geom_log) as fraction
+FROM
+	closest_points;
     '''
     conn = None
     try:
@@ -67,6 +144,45 @@ def get_closest_points(log_ids):
         conn = psycopg2.connect(**parmas)
         cur = conn.cursor()
         cur.execute(sql, (log_ids,))
+        rows = cur.fetchall()
+        cur.close()
+        return rows
+    except (Exception, psycopg2.DatabaseError) as error:
+        print(error)
+    finally:
+        if conn is not None:
+            conn.close()
+
+
+
+
+
+
+def get_closest_points(track_id):
+    sql ='''
+    SELECT 
+        log_x,
+        log_y,
+        p_x,
+        p_y,
+        v,
+        gps_log_id,
+        edge_id,
+        fraction,
+	    source,
+        target
+	
+    FROM 
+        points_of_interest
+    WHERE 
+        track_id = %s
+    '''
+    conn = None
+    try:
+        parmas = config()
+        conn = psycopg2.connect(**parmas)
+        cur = conn.cursor()
+        cur.execute(sql, (track_id,))
         rows = cur.fetchall()
         cur.close()
         return rows

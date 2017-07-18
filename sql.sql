@@ -72,23 +72,58 @@ SELECT * FROM tracks WHERE array_length(points, 1) > 10 LIMIT 1;
 
 -- select closest point
 
+WITH closest_points AS
+(
+	SELECT 
+		gps.geom as geom_log,
+		r.geom_l as geom_line,
+		r.source as source,
+		r.target as target,
+		r.gid as line_id,
+		gps.id as log_id,
+		gps.direction as v,
+		ST_ClosestPoint(r.geom_l, gps.geom) as geom_closest,
+		r.cost as length
+	FROM
+		shenzhen_network r, 
+		gps_log_valid gps
+	WHERE  
+		gps.id in (1494167,1502698,1511616,1520537,1529545,1538291,1547068,1565190,1574253,1583447,1592171,1601214) AND
+		ST_DWithin(gps.geom, r.geom_l,  30)
+)	
+SELECT 
+	ST_X(geom_log) AS log_x,
+	ST_Y(geom_log) AS log_y,
+	ST_X(geom_closest) AS p_x,
+	ST_Y(geom_closest) AS p_y,
+	line_id,
+	log_id,
+	v,
+	source,
+	target,	
+	length,
+	ST_LineLocatePoint(geom_line, geom_log) as fraction
+FROM
+	closest_points;
+
 SELECT 
 	ST_X(gps.geom) AS log_x,
 	ST_Y(gps.geom) AS log_y,
-	ST_X(ST_ClosestPoint(r.geom, gps.geom)) AS p_x,
-	ST_Y(ST_ClosestPoint(r.geom, gps.geom)) AS p_y,
+	ST_X(ST_ClosestPoint(r.geom_l, gps.geom)) AS p_x,
+	ST_Y(ST_ClosestPoint(r.geom_l, gps.geom)) AS p_y,
 	r.gid AS line_id,
 	gps.id AS log_id,
 	gps.direction AS v,
 	r.source AS source,
-	r.target AS target
+	r.target AS target,
+	ST_LineLocatePoint(r.geom_l, ST_ClosestPoint(r.geom_l, gps.geom))
 	
 FROM 
 	shenzhen_network r, 
 	gps_log_valid gps 
 WHERE 
 	gps.id in (1494167,1502698,1511616,1520537,1529545,1538291,1547068,1565190,1574253,1583447,1592171,1601214) AND
-	ST_DWithin(gps.geom, r.geom,  30);
+	ST_DWithin(gps.geom, r.geom_l,  30);
 
 
 
@@ -166,18 +201,136 @@ SELECT  ST_LineLocatePoint(line, pta), ST_Length(line) FROM data;
 
 SELECT *
 FROM pgr_dijkstraCost('
-    SELECT gid AS id,
-         source,
-         target,
-         ST_Length(geom) AS cost
-        FROM shenzhen_network',
-    %s,
-    %s,
+    SELECT 
+		gid  AS id,
+		source,
+		target,
+		cost as cost,
+		cost as reverse_cost
+	FROM
+		shenzhen_network ORDER BY gid',
+    Array [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27],
+    Array [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27],
     directed := false);
 
+SELECT * FROM pgr_dijkstraCostMatrix(
+    '
+	SELECT gid as id, source, target, cost, cost as reverse_cost FROM shenzhen_network	
+    ',
+    (SELECT array_agg(id) FROM shenzhen_network_vertices_pgr WHERE id < 1000)
+);
 
+
+
+INSERT INTO path_cost
+SELECT *
+FROM pgr_dijkstraCost('
+    SELECT 
+		gid  AS id,
+		source,
+		target,
+		cost as cost,
+		cost as reverse_cost
+	FROM
+		shenzhen_network ORDER BY gid',
+    32,
+    (SELECT array_agg(b.id) FROM shenzhen_network_vertices_pgr a, shenzhen_network_vertices_pgr b WHERE ST_DWithin(a.the_geom, b.the_geom, 5000) AND a.id = 32 GROUP BY a.id),
+    directed := false);
+
+drop table cost;
+CREATE TABLE path_cost1(
+	start_vid bigint,
+	end_vid bigint,
+	agg_dis float
+)
+
+delete from path_cost; 
+
+SELECT * FROM path_cost;
+    
+select * FROM shenzhen_network_vertices_pgr;
+
+DROP FUNCTION get_pair_distance(integer)
+CREATE OR REPLACE FUNCTION get_pair_distance (begin_vid INTEGER)
+RETURNS TABLE (
+	start_vid BIGINT,
+	end_vid BIGINT,
+	agg_dis float
+)
+AS 
+$$
+BEGIN
+RETURN QUERY SELECT * FROM pgr_dijkstraCost('
+		    SELECT 
+				gid  AS id,
+				source,
+				target,
+				cost as cost,
+				cost as reverse_cost
+			FROM
+				shenzhen_network ORDER BY gid',
+		    begin_vid,
+		    (SELECT array_agg(b.id) FROM shenzhen_network_vertices_pgr a, shenzhen_network_vertices_pgr b WHERE ST_DWithin(a.the_geom, b.the_geom, 5000) AND a.id = begin_vid),
+		    directed := false); 
+END;
+$$
+LANGUAGE 'plpgsql'
+
+SELECT * FROM get_pair_distance(2);
+
+
+
+
+DO $$
+DECLARE
+	i INTEGER := 13001;
+	n INTEGER := 16697;
+BEGIN
+	WHILE i <= n LOOP
+		i := i+1;
+		RAISE NOTICE 'Counter: %', i;
+		
+		
+		
+		INSERT INTO path_cost SELECT * FROM pgr_dijkstraCost('
+		    SELECT 
+				gid  AS id,
+				source,
+				target,
+				cost as cost,
+				cost as reverse_cost
+			FROM
+				shenzhen_network ORDER BY gid',
+		    i,
+		    (SELECT array_agg(b.id) FROM shenzhen_network_vertices_pgr a, shenzhen_network_vertices_pgr b WHERE ST_DWithin(a.the_geom, b.the_geom, 5000) AND a.id = i GROUP BY a.id),
+		    directed := false);
+		
+		
+	END LOOP;
+END;
+$$
+
+
+ 
+
+SELECT array_agg(id) FROM shenzhen_network_vertices_pgr WHERE id < 5
+
+SELECT array_agg(b.id) FROM shenzhen_network_vertices_pgr a, shenzhen_network_vertices_pgr b WHERE ST_DWithin(a.the_geom, b.the_geom, 5000) AND a.id = 1 GROUP BY a.id;
+
+
+
+
+
+
+
+
+
+
+
+
+SELECT * FROM shenzhen_network_vertices_pgr;
 SELECT ST_LineLocatePoint(line, pta)
-
+SELECT * FROM tracks WHERE id=19;
 
 
 
@@ -187,15 +340,14 @@ SELECT ST_LineLocatePoint(line, pta)
 ------- create poi table
 
 
-
-CREATE TABLE points_of_interest(
+DROP TABLE points_of_interest3;
+CREATE TABLE points_of_interest4(
     pid BIGSERIAL,
-    x FLOAT,
-    y FLOAT,
+
     edge_id BIGINT,
     side CHAR,
-    fraction FLOAT,
-    geom geometry    
+    fraction FLOAT
+  
 );
 
 
@@ -203,60 +355,86 @@ CREATE TABLE points_of_interest(
 WITH
 data AS (
 	SELECT 
-		799029.028296921 x,
-		2500355.51642549 y,
+		798663.892742802 x,
+		2500760.31480463 y,
 		22203 edge_id,
 		'b' side,
-		ST_GeomFromText('POINT(799029.028296921 2500355.51642549)', 32649) pta,		
+		ST_GeomFromText('POINT(798663.89274280 2500760.31480463)', 32649) pta,	
 		ST_GeometryN(geom, 1)::geometry(linestring, 32649) line FROM shenzhen_network WHERE gid = 22203
+		
 )
-INSERT INTO points_of_interest(
-	x,
-	y,
+INSERT INTO points_of_interest4(
+
 	edge_id,
 	side,
-	fraction,
-	geom) 
-SELECT x, y, edge_id, side, ST_LineLocatePoint(line, pta), pta FROM data;
+	fraction) 
+SELECT edge_id, side, ST_LineLocatePoint(line, pta)FROM data;
 
 --- insert one point
 WITH
 data AS (
 	SELECT 
-		797766.309896996 x,
-		2501670.61053837 y,
+		797554.654871642 x,
+		2501842.40943049 y,
 		22204 edge_id,
 		'b' side,
-		ST_GeomFromText('POINT(797766.309896996 2501670.61053837)', 32649) pta,		
+		ST_GeomFromText('POINT(797554.654871642 2501842.40943049)', 32649) pta,		
 		ST_GeometryN(geom, 1)::geometry(linestring, 32649) line FROM shenzhen_network WHERE gid = 22204
 )
-INSERT INTO points_of_interest(
-	x,
-	y,
+INSERT INTO points_of_interest4(
+
 	edge_id,
 	side,
-	fraction,
-	geom)
-SELECT x, y, edge_id, side, ST_LineLocatePoint(line, pta), pta FROM data;
+	fraction
+)
+SELECT  edge_id, side, ST_LineLocatePoint(line, pta)FROM data;
 
 --- path between two point on the middle of a line
+
+
+WITH
+data AS (
+	SELECT 
+		797554.654871642 x,
+		2501842.40943049 y,
+		22204 edge_id,
+		'b' side,
+		ST_GeomFromText('POINT(797554.654871642 2501842.40943049)', 32649) pta,		
+		ST_GeometryN(geom, 1)::geometry(linestring, 32649) line FROM shenzhen_network WHERE gid = 22204
+)
+
+
+WITH 
+poi AS (
+	SELECT * FROM points_of_interest WHERE track_id = 19
+)
 SELECT * FROM pgr_withPointsCost (
         'SELECT 
 		gid  AS id,
 		source,
 		target,
-		ST_Length(geom) as cost,
-		ST_Length(geom) as reverse_cost
+		shape_leng::float as cost
+
 	FROM
 		shenzhen_network ORDER BY gid',
-        'SELECT pid, edge_id, fraction, side from points_of_interest',
-        -4, -5);
+        'SELECT pid, edge_id, fraction, side from poi',
+        Array [-448], Array[-575],directed:=false, driving_side:='b');
+
+DROP TABLE points_of_interest5;
+CREATE TABLE points_of_interest5 AS SELECT * from points_of_interest WHERE pid in (1405, 5887, 792);
+
+SELECT * FROM points_of_interest5;
+SELECT * from points_of_interest WHERE fraction = 1;
+SELECT * from points_of_interest WHERE edge_id = 22204;
+SELECT pid, edge_id, fraction, side from points_of_interest WHERE pid = 575;
 
 
+SELECT * FROM shenzhen_network WHERE gid = 21120;
+
+SELECT * from points_of_interest WHERE pid < 0;
 
 
-
-SELECT * FROM points_of_interest;
+SELECT ST_AsText(geom), * FROM points_of_interest LIMIT 1;
 DELETE FROM points_of_interest;
 
 
@@ -266,10 +444,13 @@ DELETE FROM points_of_interest;
 -- extract linestring form multilinestring
 SELECT AddGeometryColumn ('public','shenzhen_network','geom_l',32649,'LINESTRING',2);
 UPDATE shenzhen_network SET geom_l = ST_GeometryN(geom, 1)::geometry(linestring, 32649)
+ALTER TABLE shenzhen_network ADD COLUMN cost FLOAT;
+UPDATE shenzhen_network SET cost = ST_Length(geom_l)
+CREATE INDEX shenzhen_network_gidx ON shenzhen_network USING GIST(geom_l);
+CLUSTER shenzhen_network USING shenzhen_network_gidx;
+VACUUM ANALYZE shenzhen_network;
 
-
-
-
+--- create table poi
 
 CREATE TABLE points_of_interest(
     pid BIGSERIAL,    
@@ -282,21 +463,38 @@ CREATE TABLE points_of_interest(
     edge_id BIGINT,
     side CHAR,
     fraction FLOAT,
-    geom geometry    
+    geom geometry,
+    source BIGINT,
+    target BIGINT,
+    track_id BIGINT
 );
 
+INSERT INTO points_of_interest(
+	log_x,
+	log_y,
+	p_x,
+	p_y,
+	v,
+	gps_log_id, 
+	edge_id,
+	side,
+	fraction,
+	geom,
+	source,
+	target,
+	track_id)
 
 SELECT 
 	ST_X(gps.geom) AS log_x,
 	ST_Y(gps.geom) AS log_y,
-	ST_X(ST_ClosestPoint(r.geom, gps.geom)) AS p_x,
-	ST_Y(ST_ClosestPoint(r.geom, gps.geom)) AS p_y,
+	ST_X(ST_ClosestPoint(r.geom_l, gps.geom)) AS p_x,
+	ST_Y(ST_ClosestPoint(r.geom_l, gps.geom)) AS p_y,
 	gps.direction AS v,
 	gps.id AS gps_log_id,
 	r.gid AS edge_id,
 	'b' AS side,
 	ST_LineLocatePoint(r.geom_l, gps.geom) AS fraction,
-	ST_ClosestPoint(r.geom, gps.geom) AS geom,
+	ST_ClosestPoint(r.geom_l, gps.geom) AS geom,
 	r.source AS source,
 	r.target AS target,
 	t.id AS track_id
@@ -306,15 +504,71 @@ FROM
 	gps_log_valid gps,
 	tracks t
 WHERE 
-	array_length(t.points, 1) > 10 AND
+	array_length(t.points, 1) > 15 AND
 	gps.id = ANY(t.points)  AND
 	ST_DWithin(gps.geom, r.geom,  30)
-LIMIT 10000;
+;
+
+UPDATE points_of_interest SET pid = -source WHERE fraction = 0; 
+UPDATE points_of_interest SET pid = -target WHERE fraction = 1;
+UPDATE points_of_interest SET edge_id = 0 WHERE pid < 0;
+UPDATE points_of_interest SET fraction = 0 WHERE pid < 0; 
+
+
+CREATE INDEX points_of_interest_idx ON points_of_interest(track_id);
+CLUSTER points_of_interest USING points_of_interest_idx
+VACUUM ANALYZE points_of_interest
+
+
+
+SELECT * FROM tracks WHERE array_length(points, 1) > 15 LIMIT 1;
+
+
+SELECT 
+	ST_X(gps.geom) AS log_x,
+	ST_Y(gps.geom) AS log_y,
+	ST_X(ST_ClosestPoint(r.geom_l, gps.geom)) AS p_x,
+	ST_Y(ST_ClosestPoint(r.geom_l, gps.geom)) AS p_y,
+	gps.direction AS v,
+	gps.id AS gps_log_id,
+	r.gid AS edge_id,
+	'b' AS side,
+	ST_LineLocatePoint(r.geom_l, gps.geom) AS fraction,
+	ST_ClosestPoint(r.geom_l, gps.geom) AS geom,
+	r.source AS source,
+	r.target AS target
+	
+	
+FROM 
+	shenzhen_network r, 
+	gps_log_valid gps,
+	
+WHERE 
+	
+	gps.id = ANY ("{2829550,2834054,2838927,2843599,2848349,2853258,2857972,2862800,2867704,2873457,2873463,2877453,2882288,2887327,2892246,2897096,2902997}")  AND
+	ST_DWithin(gps.geom_l, r.geom,  30)
+;
 
 
 
 
-SELECT * FROM tracks LIMIT 1;
+
+
+
+
+
+SELECT source, target, cost FROM shenzhen_network WHERE source = 917;
+
+
+SELECT id FROM shenzhen_network_vertices_pgr;
+
+
+
+
+
+
+
+
 
 
 

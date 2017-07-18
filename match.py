@@ -1,11 +1,15 @@
 # -*- encoding: utf-8
 
-from query import get_tracks, get_closest_points, get_distance_in_linestring, get_path_cost, get_distance_to_start
+from query import get_tracks, get_closest_points1, get_distance_in_linestring, get_path_cost, get_distance_to_start, get_distance_rows
 from insert import insert_match
 import math
 import networkx as nx
 import matplotlib.pyplot as plt
 import time
+import road_graph
+
+
+
 
 # 标准正态分布的概率密度函数
 def normal_distribution(x, u = 0.0, sigma = 20.0):    
@@ -20,7 +24,7 @@ def is_same_direction(x1, y1, x2, y2):
 
 # observation probability
 def get_observation_prob(closest_point):
-    log_x, log_y, p_x, p_y, line_id, log_id, v, source, target = closest_point
+    log_x, log_y, p_x, p_y, line_id, gps_log_id, v,  source, target, length, fraction = closest_point
 
     dis = euclidan_dis(log_x, log_y, p_x, p_y)
 
@@ -34,9 +38,9 @@ def euclidan_dis(x1, y1, x2, y2):
 
 
 
-def get_path_distance(pre_closest_point, now_closest_point):
-    pre_log_x, pre_log_y, pre_p_x, pre_p_y, pre_line_id, pre_log_id, pre_v, pre_source, pre_target = pre_closest_point
-    now_log_x, now_log_y, now_p_x, now_p_y, now_line_id, now_log_id, now_v, now_source, now_target = now_closest_point
+def get_path_distance(pre_closest_point, now_closest_point, dis_dict):
+    pre_log_x, pre_log_y, pre_p_x, pre_p_y, pre_line_id, pre_gps_log_id, pre_v,  pre_source, pre_target, pre_length, pre_fraction = pre_closest_point
+    now_log_x, now_log_y, now_p_x, now_p_y, now_line_id, now_gps_log_id, now_v,  now_source, now_target, now_length, now_fraction = now_closest_point
 
     if pre_line_id == now_line_id: # 共线
         x1 = now_log_x - pre_log_x
@@ -47,7 +51,7 @@ def get_path_distance(pre_closest_point, now_closest_point):
         if is_same_direction(x1, y1, x2, y2): # 共向
 
             
-            path_dis = get_distance_in_linestring(pre_p_x, pre_p_y, now_p_x, now_p_y, now_line_id)[0]
+            path_dis = abs(pre_fraction - now_fraction) * pre_length
             return path_dis # 返回道路上的距离
 
         else: # 反向
@@ -62,41 +66,31 @@ def get_path_distance(pre_closest_point, now_closest_point):
         if 1: # p1双向
             if 1: # p2双向
 
-                pre_proportion, pre_len = get_distance_to_start(pre_p_x, pre_p_y, pre_line_id) # p1到路径起点长度的比例， 路径的长度
-                now_proportion, now_len = get_distance_to_start(now_p_x, now_p_y, now_line_id) # p2到路径起点长度的比例， 路径的长度
-
-                path_dis_dict = {
-                    pre_source: {},
-                    pre_target: {}
-                }
 
                 source_ids = [pre_source, pre_target]
                 target_ids = [now_source, now_target]
                 
-
-                rows = get_path_cost(source_ids, target_ids) # 得到p1所在路径的起点终点，到p2所在路径的起点终点的dijkstra距离
-
-                for row in rows:
-                    path_dis_dict[row[0]][row[1]] = row[2]
                 
                 min_path_dis = 999999999
                 for id_x, key_x in enumerate(source_ids):
                     for id_y, key_y in enumerate(target_ids):
-                        
-                            routing_dis = path_dis_dict[key_x].get(key_y, -100) 
-                            if routing_dis == -100: # 不存在可能为0或者为无穷大
-                                if key_x in target_ids:
+                            try:
+                                routing_dis = dis_dict[key_x][key_y]
+                            except Exception:
+                                if key_x == key_y:
                                     routing_dis = 0
                                 else:
-                                    routing_dis = 999999999
+                                    routing_dis = 99999999 
+                            print(routing_dis)
+                            
                             if id_x == 0: # 从p1的source出发                    
-                                routing_dis += pre_len * pre_proportion 
+                                routing_dis += pre_length * pre_fraction 
                             elif id_x ==1: # 从p1的target出发                        
-                                routing_dis += pre_len * (1.0 - pre_proportion)
+                                routing_dis += pre_length * (1.0 - pre_fraction)
                             if id_y == 0: # 到达p2的source
-                                routing_dis += now_len * now_proportion
+                                routing_dis += now_length * now_fraction
                             elif id_y == 1: # 到达p2的target
-                                routing_dis += now_len * (1.0 - now_proportion)
+                                routing_dis += now_length * (1.0 - now_fraction)
 
                             if routing_dis < min_path_dis:
                                 min_path_dis = routing_dis
@@ -114,11 +108,11 @@ def get_path_distance(pre_closest_point, now_closest_point):
 
 
 # transimission probability
-def get_transmission_probability(pre_closest_point, now_closest_point):
-    p_path_dis = get_path_distance(pre_closest_point, now_closest_point) # 两个匹配点的路径距离
+def get_transmission_probability(pre_closest_point, now_closest_point, dis_dict):
+    p_path_dis = get_path_distance(pre_closest_point, now_closest_point, dis_dict) # 两个匹配点的路径距离
 
-    pre_log_x, pre_log_y, pre_p_x, pre_p_y, pre_line_id, pre_log_id, pre_v, pre_source, pre_target = pre_closest_point
-    now_log_x, now_log_y, now_p_x, now_p_y, now_line_id, now_log_id, now_v, now_source, now_target = now_closest_point
+    pre_log_x, pre_log_y, pre_p_x, pre_p_y, pre_line_id, pre_gps_log_id, pre_v,  pre_source, pre_target, pre_length, pre_fraction = pre_closest_point
+    now_log_x, now_log_y, now_p_x, now_p_y, now_line_id, now_gps_log_id, now_v,  now_source, now_target, now_length, now_fraction = now_closest_point
 
     log_dis = euclidan_dis(pre_log_x, pre_log_y, now_log_x, now_log_y) # 两个gps点的直线距离
 
@@ -131,7 +125,7 @@ def get_transmission_probability(pre_closest_point, now_closest_point):
 # @param closest_points {{list}} closest point list
 # @param log_closest_dict {{dict}} log_id: [closest_pnt_idx1, closest_pnt_idx2 ...]
 #
-def construct_graph(log_ids, closest_points, log_closest_dict):
+def construct_graph(log_ids, closest_points, log_closest_dict, dis_dict):
 
     g = nx.Graph()
     pre_layer_idx = []
@@ -150,7 +144,7 @@ def construct_graph(log_ids, closest_points, log_closest_dict):
             else:
                 for idx in pre_layer_idx:
 
-                    transmission_prob = get_transmission_probability(closest_points[idx], closest_points[closest_idx])
+                    transmission_prob = get_transmission_probability(closest_points[idx], closest_points[closest_idx], dis_dict)
 
                     g.add_edge(idx, closest_idx, transmission_prob=transmission_prob)
 
@@ -215,19 +209,31 @@ def main():
             log_closest_dict[int(log_id)] = []
         
         
-        closest_points = get_closest_points(tuple(track[1])) # get gps log id's closest point in raod network
+        closest_points = get_closest_points1(tuple(track[1])) # get gps log id's closest point in raod network
         
-        for idx, point in enumerate(closest_points):
-            log_x, log_y, p_x, p_y, line_id, log_id, v, source, target = point                                    
-            log_closest_dict[int(log_id)].append(idx)
-        
-        
+        source_arr = []
 
-        g = construct_graph(track[1] , closest_points, log_closest_dict)
+        for idx, point in enumerate(closest_points):
+            	
+            log_x, log_y, p_x, p_y, line_id, gps_log_id, v,  source, target, length, fraction = point            
+            source_arr.append(source)
+            source_arr.append(target)
+            log_closest_dict[int(gps_log_id)].append(idx)
+        
+        dis_rows = get_distance_rows(tuple(source_arr))
+        dis_dict = {}
+        for row in dis_rows:
+            if dis_dict.get(row[0]) == None:
+                dis_dict[row[0]] = {}
+                
+            dis_dict[row[0]][row[1]] = row[2]
+                
+
+        g = construct_graph(track[1] , closest_points, log_closest_dict, dis_dict)
         
         match_list = find_match_seqence(g, track[1], log_closest_dict)
         
-        insert_match(match_list, closest_points, track[0])
+        #insert_match(match_list, closest_points, track[0])
         
         print('track({0}): {1} time: {2} elapse: {3}'.format(track[0], len(track[1]), time.time() - begin_track, time.time() - begin_main))
         
