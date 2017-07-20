@@ -82,7 +82,7 @@ def get_distance_rows(vids):
 
 def get_tracks():
     sql = '''
-            SELECT * FROM tracks WHERE array_length(points, 1) > 15 LIMIT 100;
+            SELECT * FROM tracks WHERE array_length(points, 1) > 15 LIMIT 1000;
           '''
     conn = None
     try:

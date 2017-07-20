@@ -35,7 +35,7 @@ def insert_match(match_list, closest_points, track_id):
     wkt_multipoint_base = 'MULTIPOINT({0})'
     point_datas = []
     for idx in match_list:
-        now_log_x, now_log_y, now_p_x, now_p_y, now_line_id, now_log_id, now_v, now_source, now_target = closest_points[idx]
+        now_log_x, now_log_y, now_p_x, now_p_y, now_line_id, now_gps_log_id, now_v,  now_source, now_target, now_length, now_fraction = closest_points[idx]
         point_data = '{0} {1}'.format(now_p_x, now_p_y)
         point_datas.append(point_data)
 

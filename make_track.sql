@@ -94,6 +94,7 @@ points INTEGER[]
 -- invode the function
 SELECT make_track('tracks_2');
 SELECT COUNT(*) FROM gps_log_valid;
+SELECT COUNT(*) FROM tracks_2 WHERE ARRAY_LENGTH(points, 1) > 15;
 
 -- 运行时间, 3375809条有效log
 
