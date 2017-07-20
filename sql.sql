@@ -238,7 +238,7 @@ FROM pgr_dijkstraCost('
     directed := false);
 
 drop table cost;
-CREATE TABLE path_cost1(
+CREATE TABLE path_cost(
 	start_vid bigint,
 	end_vid bigint,
 	agg_dis float
@@ -246,41 +246,14 @@ CREATE TABLE path_cost1(
 
 delete from path_cost; 
 
-SELECT * FROM path_cost;
-    
+SELECT * FROM path_cost WHERE start_vid = 1 AND end_vid =1;
+CREATE INDEX path_cost_idx ON path_cost(start_vid, end_vid)
+CLUSTER path_cost USING path_cost_idx;
+VACUUM ANALYZE path_cost;
+
+
+
 select * FROM shenzhen_network_vertices_pgr;
-
-DROP FUNCTION get_pair_distance(integer)
-CREATE OR REPLACE FUNCTION get_pair_distance (begin_vid INTEGER)
-RETURNS TABLE (
-	start_vid BIGINT,
-	end_vid BIGINT,
-	agg_dis float
-)
-AS 
-$$
-BEGIN
-RETURN QUERY SELECT * FROM pgr_dijkstraCost('
-		    SELECT 
-				gid  AS id,
-				source,
-				target,
-				cost as cost,
-				cost as reverse_cost
-			FROM
-				shenzhen_network ORDER BY gid',
-		    begin_vid,
-		    (SELECT array_agg(b.id) FROM shenzhen_network_vertices_pgr a, shenzhen_network_vertices_pgr b WHERE ST_DWithin(a.the_geom, b.the_geom, 5000) AND a.id = begin_vid),
-		    directed := false); 
-END;
-$$
-LANGUAGE 'plpgsql'
-
-SELECT * FROM get_pair_distance(2);
-
-
-
-
 DO $$
 DECLARE
 	i INTEGER := 13001;
