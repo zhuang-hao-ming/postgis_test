@@ -1,4 +1,10 @@
 # -*- encoding: utf-8 -*-
+# author: haoming
+# 将*.rar文件导入数据库
+#
+
+
+
 import rarfile
 import datetime
 from insert import insert_logs
