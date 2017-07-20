@@ -81,16 +81,18 @@ def get_path_distance(pre_closest_point, now_closest_point, dis_dict):
                                     routing_dis = 0
                                 else:
                                     routing_dis = 99999999 
-                            print(routing_dis)
+                            #print(routing_dis)
                             
                             if id_x == 0: # 从p1的source出发                    
                                 routing_dis += pre_length * pre_fraction 
                             elif id_x ==1: # 从p1的target出发                        
                                 routing_dis += pre_length * (1.0 - pre_fraction)
+
                             if id_y == 0: # 到达p2的source
                                 routing_dis += now_length * now_fraction
                             elif id_y == 1: # 到达p2的target
                                 routing_dis += now_length * (1.0 - now_fraction)
+
 
                             if routing_dis < min_path_dis:
                                 min_path_dis = routing_dis
@@ -115,8 +117,8 @@ def get_transmission_probability(pre_closest_point, now_closest_point, dis_dict)
     now_log_x, now_log_y, now_p_x, now_p_y, now_line_id, now_gps_log_id, now_v,  now_source, now_target, now_length, now_fraction = now_closest_point
 
     log_dis = euclidan_dis(pre_log_x, pre_log_y, now_log_x, now_log_y) # 两个gps点的直线距离
-
-    return log_dis / (p_path_dis+0.0000001) # 转移概率
+    # print log_dis
+    return log_dis / (p_path_dis+0.0001) # 转移概率
 
 
 
@@ -158,6 +160,7 @@ def construct_graph(log_ids, closest_points, log_closest_dict, dis_dict):
 def find_match_seqence(g, log_ids, log_closest_dict):
     f = {}
     pre = {}
+    # print(log_closest_dict)
     for idx in log_closest_dict[log_ids[0]]:
              
         f[idx] = g.node[idx]['observation_prob']        
@@ -165,6 +168,7 @@ def find_match_seqence(g, log_ids, log_closest_dict):
         for p_idx in log_closest_dict[log_id]:
             max_f = -99999999
             for p_p_idx in log_closest_dict[log_ids[layer_idx]]:
+                # print p_p_idx, p_idx
                 alt = g.edge[p_p_idx][p_idx]['transmission_prob'] + f[p_p_idx]
                 if alt > max_f:
                     max_f = alt
@@ -173,14 +177,16 @@ def find_match_seqence(g, log_ids, log_closest_dict):
     max_c = -99999999
     max_key = None
     for key, val in f.items():
-        if val > max_c:
+        if val >= max_c:
             max_key = key
             max_c = val
         else:
             continue
     r_list = []
+    
     for i in range(1, len(log_ids)):
         r_list.append(max_key)
+    
         max_key = pre[max_key]
     r_list.append(max_key)
     r_list.reverse()
@@ -209,7 +215,7 @@ def main():
             log_closest_dict[int(log_id)] = []
         
         
-        closest_points = get_closest_points1(tuple(track[1])) # get gps log id's closest point in raod network
+        closest_points = get_closest_points1(tuple(track[1])) # get gps log id's closest point in raod network 慢
         
         source_arr = []
 
@@ -233,7 +239,7 @@ def main():
         
         match_list = find_match_seqence(g, track[1], log_closest_dict)
         
-        #insert_match(match_list, closest_points, track[0])
+        insert_match(match_list, closest_points, track[0])
         
         print('track({0}): {1} time: {2} elapse: {3}'.format(track[0], len(track[1]), time.time() - begin_track, time.time() - begin_main))
         

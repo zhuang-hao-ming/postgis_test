@@ -415,6 +415,7 @@ DELETE FROM points_of_interest;
 
 
 -- extract linestring form multilinestring
+
 SELECT AddGeometryColumn ('public','shenzhen_network','geom_l',32649,'LINESTRING',2);
 UPDATE shenzhen_network SET geom_l = ST_GeometryN(geom, 1)::geometry(linestring, 32649)
 ALTER TABLE shenzhen_network ADD COLUMN cost FLOAT;
@@ -536,9 +537,14 @@ SELECT source, target, cost FROM shenzhen_network WHERE source = 917;
 SELECT id FROM shenzhen_network_vertices_pgr;
 
 
+CREATE TABLE match_track
+(
+	id SERIAL PRIMARY KEY,
+	track_id BIGINT		
+)
+SELECT AddGeometryColumn('public', 'match_track', 'geom', 32649, 'MULTIPOINT', 2);
 
-
-
+SELECT * FROM match_track;
 
 
 
